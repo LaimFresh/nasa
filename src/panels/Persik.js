@@ -9,22 +9,25 @@ import {
     Input,
     Card,
     CardGrid,
-    Text,
-    Group,
+    Text, Group,
 } from '@vkontakte/vkui';
 import { useRouteNavigator } from '@vkontakte/vk-mini-apps-router';
 import { useState } from 'react';
 import axios from 'axios';
 import { format, subDays } from 'date-fns';
 
-const API_KEY = 'MGOhtPomOuht51sQtifQ8uiCZyMCoT02X97AxkJ2';
+const API_KEY = 'r5MT1FhW1oYeQmvnfZiVM99DXimD7jRS9D09Jg6j';
 
+// eslint-disable-next-line react/prop-types
 export const NasaPanel = ({ id }) => {
     const routeNavigator = useRouteNavigator();
     const [apiType, setApiType] = useState('apod');
     const [startDate, setStartDate] = useState(format(subDays(new Date(), 7), 'yyyy-MM-dd'));
     const [endDate, setEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
     const [photos, setPhotos] = useState([]);
+    const [asteroids, setAsteroids] = useState([]);
+    // eslint-disable-next-line no-unused-vars
+    let [urlTest] = useState();
 
     const fetchNasaData = async () => {
         try {
@@ -34,58 +37,47 @@ export const NasaPanel = ({ id }) => {
             };
 
             if (apiType === 'apod') {
-                url = 'https://api.nasa.gov/planetary/apod'; 
+                url = 'https://api.nasa.gov/planetary/apod';
                 params.start_date = startDate;
                 params.end_date = endDate;
             } else if (apiType === 'mars') {
-                url = 'https://api.nasa.gov/mars-photos/api/v1/rovers/curiosity/photos'; 
+                url = 'https://api.nasa.gov/mars-photos/api/v1/rovers/curiosity/photos';
                 params.earth_date = startDate;
             } else if (apiType === 'earth') {
-                url = `https://api.nasa.gov/EPIC/api/natural/date/${startDate}`; 
+                url = 'https://api.nasa.gov/EPIC/api/natural/date/' + startDate;
             } else if (apiType === 'asteroids') {
-                url = 'https://api.nasa.gov/neo/rest/v1/feed'; 
+                url = 'https://api.nasa.gov/neo/rest/v1/feed';
                 params.start_date = startDate;
                 params.end_date = endDate;
             }
-
+            
             const response = await axios.get(url, { params });
-
+            
             if (apiType === 'apod') {
                 setPhotos(Array.isArray(response.data) ? response.data : [response.data]);
+                setAsteroids([]);
             } else if (apiType === 'mars') {
-                setPhotos(response.data.photos.slice(0, 25));
+                setPhotos(response.data.photos.slice(0, 25)); // Limit to 25 photos
+                setAsteroids([]);
             } else if (apiType === 'earth') {
-                setPhotos(
-                    response.data.map((item) => ({
-                        ...item,
-                        img_src: `https://epic.gsfc.nasa.gov/archive/natural/${startDate 
-                            .split('-')
-                            .join('/')}/png/${item.image}.png`,
-                    }))
-                );
+                setPhotos(response.data.map(item => ({
+                    ...item,
+                    img_src: `https://epic.gsfc.nasa.gov/archive/natural/${startDate.split('-').join('/')}/png/${item.image}.png`
+                })));
+                setAsteroids([]);
+                console.log(url);
             } else if (apiType === 'asteroids') {
-                const asteroids = [];
-                const dates = Object.keys(response.data.near_earth_objects);
-
-                for (const date of dates) {
-                    const items = response.data.near_earth_objects[date];
-                    for (const item of items) {
-                        asteroids.push({
-                            id: item.id,
-                            name: item.name,
-                            date: date,
-                            diameter: item.estimated_diameter.meters.estimated_diameter_max,
-                            hazardous: item.is_potentially_hazardous_asteroid,
-                            url: item.nasa_jpl_url,
-                            close_approach: item.close_approach_data[0]?.miss_distance.kilometers || '—',
-                        });
-                    }
+                // Process asteroid data
+                const asteroidsData = [];
+                // The API returns data by date, so we need to flatten it
+                for (const date in response.data.near_earth_objects) {
+                    asteroidsData.push(...response.data.near_earth_objects[date]);
                 }
-
-                setPhotos(asteroids);
+                setAsteroids(asteroidsData);
+                setPhotos([]);
             }
         } catch (e) {
-            console.error('Ошибка при загрузке данных:', e.message);
+            console.error("Error fetching NASA data:", e);
         }
     };
 
@@ -105,15 +97,16 @@ export const NasaPanel = ({ id }) => {
                 </Div>
             </Group>
             <Group header={<Header mode="secondary">Параметры поиска</Header>}>
-                <FormItem top="Категория фото">
+                <Text value={urlTest}></Text>
+                <FormItem top="Катигория фото">
                     <Select
                         value={apiType}
                         onChange={(e) => setApiType(e.target.value)}
                         options={[
                             { value: 'apod', label: 'Фото дня' },
                             { value: 'mars', label: 'Фото с марсохода' },
-                            { value: 'earth', label: 'Фото планеты Земля' },
-                            { value: 'asteroids', label: 'Ближайшие астероиды' },
+                            { value: 'earth', label: 'Фото планеты Земли' },
+                            { value: 'asteroids', label: 'Астероиды' }
                         ]}
                     />
                 </FormItem>
@@ -125,7 +118,7 @@ export const NasaPanel = ({ id }) => {
                     />
                 </FormItem>
 
-                {apiType !== 'mars' && (
+                {(apiType !== 'mars' && apiType !== 'earth') && (
                     <FormItem top="По">
                         <Input
                             type="date"
@@ -136,68 +129,79 @@ export const NasaPanel = ({ id }) => {
                 )}
 
                 <FormItem>
-                    <Button size="l" stretched onClick={fetchNasaData}>
-                        Найти фото
+                    <Button
+                        size="l"
+                        stretched
+                        onClick={fetchNasaData}
+                    >
+                        Найти данные
                     </Button>
                 </FormItem>
             </Group>
+            
             {photos.length > 0 && (
-                <Group header={<Header mode="secondary">Результаты</Header>}>
+                <Group header={<Header mode="secondary">Фото</Header>}>
                     <CardGrid size="m">
                         {photos.map((photo, index) => (
                             <Card key={index}>
                                 <div style={{ padding: '12px' }}>
-                                    {/* Фото */}
-                                    {photo.img_src && (
+                                    {photo.img_src ? (
                                         <img
                                             src={photo.img_src}
                                             alt={photo.title || `NASA Photo ${index}`}
-                                            style={{
-                                                width: '100%',
-                                                borderRadius: '8px',
-                                            }}
+                                            style={{ width: '100%', borderRadius: '8px' }}
+                                        />
+                                    ) : photo.url && (
+                                        <img
+                                            src={photo.url}
+                                            alt={photo.title || `NASA Photo ${index}`}
+                                            style={{ width: '100%', borderRadius: '8px' }}
                                         />
                                     )}
-
-                                    {/* Астероиды */}
-                                    {photo.id && !photo.img_src && (
-                                        <>
-                                            <Text weight="2">Название: {photo.name}</Text>
-                                            <Text>Дата: {photo.date}</Text>
-                                            <Text>
-                                                Диаметр: ~{Math.round(photo.diameter)} м
-                                            </Text>
-                                            <Text>
-                                                Расстояние до Земли: {photo.close_approach} км
-                                            </Text>
-                                            <Text
-                                                style={{
-                                                    color: photo.hazardous ? 'red' : 'green',
-                                                }}
-                                            >
-                                                {photo.hazardous ? 'Опасный' : 'Не опасен'}
-                                            </Text>
-                                            <a
-                                                href={photo.url}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                style={{
-                                                    display: 'block',
-                                                    marginTop: '8px',
-                                                    textDecoration: 'underline',
-                                                }}
-                                            >
-                                                Подробнее
-                                            </a>
-                                        </>
+                                    <Text weight="2" style={{ marginTop: '8px' }}>
+                                        {photo.title || `Фото №${index + 1}`}
+                                    </Text>
+                                    {photo.date && (
+                                        <Text weight="3" style={{ color: 'var(--text_subhead)' }}>
+                                            {new Date(photo.date).toLocaleDateString()}
+                                        </Text>
                                     )}
-
-                                    {/* Описание для APOD */}
                                     {photo.explanation && (
                                         <Text style={{ marginTop: '8px' }}>
                                             {photo.explanation.substring(0, 100)}...
                                         </Text>
                                     )}
+                                </div>
+                            </Card>
+                        ))}
+                    </CardGrid>
+                </Group>
+            )}
+            
+            {asteroids.length > 0 && (
+                <Group header={<Header mode="secondary">Астероиды</Header>}>
+                    <CardGrid size="m">
+                        {asteroids.map((asteroid, index) => (
+                            <Card key={index}>
+                                <div style={{ padding: '12px' }}>
+                                    <Text weight="2" style={{ marginTop: '8px' }}>
+                                        {asteroid.name}
+                                    </Text>
+                                    <Text weight="3" style={{ color: 'var(--text_subhead)' }}>
+                                        Диаметр: {Math.round(asteroid.estimated_diameter.meters.estimated_diameter_min)} - {Math.round(asteroid.estimated_diameter.meters.estimated_diameter_max)} м
+                                    </Text>
+                                    <Text style={{ marginTop: '8px' }}>
+                                        Опасен: {asteroid.is_potentially_hazardous_asteroid ? 'Да' : 'Нет'}
+                                    </Text>
+                                    <Text style={{ marginTop: '8px' }}>
+                                        Скорость: {Math.round(asteroid.close_approach_data[0].relative_velocity.kilometers_per_second)} км/с
+                                    </Text>
+                                    <Text style={{ marginTop: '8px' }}>
+                                        Расстояние: {Math.round(asteroid.close_approach_data[0].miss_distance.kilometers)} км
+                                    </Text>
+                                    <Text style={{ marginTop: '8px' }}>
+                                        Дата сближения: {new Date(asteroid.close_approach_data[0].close_approach_date_full).toLocaleDateString()}
+                                    </Text>
                                 </div>
                             </Card>
                         ))}
